@@ -35,15 +35,9 @@ app.post('/reg', (req, res) => {
     !req.body.name ||
     !req.body.email ||
     !req.body.password ||
-    !req.body.confirm
+    !req.body.phone
   ) {
     res.status(203).send('Nem adtál meg minden kötelező adatot!');
-    return;
-  }
-
-  // jelszavak ellenőrzése
-  if (req.body.password != req.body.confirm) {
-    res.status(203).send('A megadott jelszavak nem egyeznek!');
     return;
   }
 
@@ -72,9 +66,9 @@ app.post('/reg', (req, res) => {
       pool.query(
         `INSERT INTO users VALUES('${uuid.v4()}', '${req.body.name}', '${
           req.body.email
-        }', SHA1('${req.body.password}'), '0', '1')`,
-        (err, results) => {
-          if (err) {
+        }', SHA1('${req.body.password}'), 'usr', NULL, '1')`,
+          (err, results) => {
+            if (err) {
             res.status(500).send('Hiba történt az adatbázis művelet közben!');
             return;
           }
