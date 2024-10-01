@@ -11,10 +11,10 @@ CREATE TABLE `users` (
 CREATE TABLE `recipe` (
     `id` INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
     `title` VARCHAR(64) NOT NULL,
-    `description` VARCHAR NOT NULL,
+    `description` TEXT NOT NULL,
     `calories` INT NOT NULL,
     `time` INT NOT NULL, -- adm, usr, mod
-    `image` VARCHAR
+    `image` MEDIUMBLOB
 );
 
 CREATE TABLE `addition` (

@@ -96,11 +96,12 @@ app.post('/login', (req, res) => {
   }
 
   pool.query(
-    `SELECT id, name, email, role, status FROM users WHERE email ='${
+    `SELECT id, name, email, role, banned FROM users WHERE email ='${
       req.body.email
-    }' AND pass='${CryptoJS.SHA1(req.body.password)}'`,
+    }' AND password='${CryptoJS.SHA1(req.body.password)}'`,
     (err, results) => {
       if (err) {
+        console.log(err)
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
         return;
       }
