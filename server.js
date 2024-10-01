@@ -42,7 +42,7 @@ app.post('/reg', (req, res) => {
   }
 
   // jelszó min kritériumoknak megfelelés
-  if (!req.body.password.match(passwdRegExp)) {
+  if (!req.body.password.match(passwordRegExp)) {
     res.status(203).send('A jelszó nem elég biztonságos!');
     return;
   }
