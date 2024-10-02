@@ -12,8 +12,8 @@ const passwordRegExp = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/;
 
 // middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 var pool = mysql.createPool({
   connectionLimit: process.env.CONNECTIONLIMIT,
@@ -66,7 +66,7 @@ app.post('/reg', (req, res) => {
       pool.query(
         `INSERT INTO users VALUES('${uuid.v4()}', '${req.body.name}', '${
           req.body.email
-        }', SHA1('${req.body.password}'), 'usr', NULL, '1')`,
+        }', SHA1('${req.body.password}'), 'usr', ${req.body.phone}, '0')`,
           (err, results) => {
             if (err) {
             res.status(500).send('Hiba történt az adatbázis művelet közben!');
@@ -108,9 +108,10 @@ app.post('/login', (req, res) => {
     },
   );
 });
+
 // Kategóriák lekérése
 app.get('/categories', logincheck, (req, res) => {
-  pool.query(`SELECT name FROM categories`, (err, results) => {
+  pool.query(`SELECT * FROM categories`, (err, results) => {
     if (err) {
       res.status(500).send('Hiba történt az adatbázis lekérés közben!');
       return;
@@ -133,7 +134,7 @@ app.get('/me/:id', logincheck, (req, res) => {
   }
 
   pool.query(
-    `SELECT name, email, role FROM users WHERE ID='${req.params.id}'`,
+    `SELECT name, email, role, phone, banned FROM users WHERE ID='${req.params.id}'`,
     (err, results) => {
       if (err) {
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -158,7 +159,7 @@ app.patch('/users/:id', logincheck, (req, res) => {
     return;
   }
 
-  if (!req.body.name || !req.body.email || !req.body.role) {
+  if (!req.body.name || !req.body.email || !req.body.role || !req.body.role) {
     res.status(203).send('Hiányzó adatok!');
     return;
   }
@@ -169,7 +170,7 @@ app.patch('/users/:id', logincheck, (req, res) => {
   pool.query(
     `UPDATE users SET name='${req.body.name}', email='${
       req.body.email
-    }', role='${req.body.role == 'Admin' ? 1 : 0}' WHERE id='${req.params.id}'`,
+    }', phone='${req.body.phone}', role='${req.body.role}' WHERE id='${req.params.id}'`,
     (err, results) => {
       if (err) {
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -194,14 +195,8 @@ app.patch('/passmod/:id', logincheck, (req, res) => {
     return;
   }
 
-  if (!req.body.oldpass || !req.body.newpass || !req.body.confirm) {
+  if (!req.body.oldpass || !req.body.newpass) {
     res.status(203).send('Hiányzó adatok!');
-    return;
-  }
-
-  // jelszavak ellenőrzése
-  if (req.body.newpass != req.body.confirm) {
-    res.status(203).send('A megadott jelszavak nem egyeznek!');
     return;
   }
 
@@ -230,7 +225,7 @@ app.patch('/passmod/:id', logincheck, (req, res) => {
       }
 
       pool.query(
-        `UPDATE users SET pass=SHA1('${req.body.newpass}') WHERE id='${req.params.id}'`,
+        `UPDATE users SET password='${CryptoJS.SHA1(req.body.newpass).toString()}' WHERE id='${req.params.id}'`,
         (err, results) => {
           if (err) {
             res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -254,7 +249,7 @@ app.patch('/passmod/:id', logincheck, (req, res) => {
 app.get('/users', (req, res) => {
   //TODO: csak admin joggal lehet - később
 
-  pool.query(`SELECT id, name, email, role FROM users`, (err, results) => {
+  pool.query(`SELECT id, name, email, role, phone, banned FROM users`, (err, results) => {
     if (err) {
       res.status(500).send('Hiba történt az adatbázis lekérés közben!');
       return;
@@ -297,7 +292,7 @@ app.get('/users/:id', (req, res) => {
   }
 
   pool.query(
-    `SELECT name, email, role FROM users WHERE ID='${req.params.id}'`,
+    `SELECT name, email, role, phone, banned FROM users WHERE ID='${req.params.id}'`,
     (err, results) => {
       if (err) {
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -342,61 +337,85 @@ app.delete('/users/:id', logincheck, (req, res) => {
 });
 
 // Zoli
-app.post('/recipes/:userID', logincheck, (req, res) => {
+app.post('/recipes', logincheck, (req, res) => {
   console.log('Ezt is meghívták');
-  if (!req.params.userID || req.params.userID == 'undefined') {
-    console.log('Hiányzó azonosító!');
-    res.status(203).send('Hiányzó azonosító!');
-    return;
-  }
 
   if (
     !req.body.title ||
-    !req.body.descr ||
+    !req.body.description ||
+    !req.body.calories ||
     !req.body.time ||
-    !req.body.ingredients ||
-    !req.body.calorie
+    !req.body.image ||
+    !req.body.categories ||
+    !req.body.additions
   ) {
     console.log('Hiányzó adatok!');
     res.status(203).send('Hiányzó adatok!');
     return;
   }
-  console.log('Fasz');
-  console.log(req.body.cat);
+  let recipeId = null;
   pool.query(
-    `SELECT id FROM categories WHERE name = "${req.body.cat}"`,
-    (err, results) => {
+    `INSERT INTO recipes (user_id, title, description, calories, time, image) VALUES ('${
+      req.header('Authorization')}', '${req.body.title}', '${req.body.description}', ${req.body.calories}, '${req.body.time}', '${req.body.image}')`,
+    (err, end) => {
       if (err) {
-        console.log('Hiba történt az adatbázis művelet közben! (0)');
-        res.status(500).send('Hiba történt az adatbázis művelet közben! (0)');
+        console.log('Hiba történt az adatbázis művelet közben! (1)');
+        console.log(err)
+        res
+          .status(500)
+          .send('Hiba történt az adatbázis művelet közben! (1)');
         return;
       }
-      if (results.length != 0) {
-        console.log(results[0]);
-        //console.log(`INSERT INTO recipes (catid, userid, title, descr, time, ingredients, calorie) VALUES('${results[0].id}', '${req.params.userID}', '${req.body.title}', '${req.body.descr}', ${req.body.time}, '${req.body.ingredients}', ${req.body.calorie})`);
 
-        pool.query(
-          `INSERT INTO recipes (catid, userid, title, descr, time, ingredients, calorie) VALUES('${results[0].id}', '${req.params.userID}', '${req.body.title}', '${req.body.descr}', ${req.body.time}, '${req.body.ingredients}', ${req.body.calorie})`,
-          (err, end) => {
-            if (err) {
-              console.log('Hiba történt az adatbázis művelet közben! (1)');
-              res
-                .status(500)
-                .send('Hiba történt az adatbázis művelet közben! (1)');
-              return;
-            }
-            console.log(end);
-            res.status(200).send('The recipe has been added!');
-            return;
-          },
-        );
-      }
+      recipeId = end.insertId;
     },
   );
+
+  req.body.categories = req.body.categories;
+  const jaj = req.body.categories.map(x => `(${recipeId}', '${x}')`);
+
+  if (req.body.categories.length != 0) {
+    pool.query(
+      `INSERT INTO category_claims VALUES ${jaj.join(', ')}`,
+      (err, end) => {
+        if (err) {
+          console.log('Hiba történt az adatbázis művelet közben! (2)');
+          res
+            .status(500)
+            .send('Hiba történt az adatbázis művelet közben! (2)');
+          return;
+        }
+        console.log(end);
+        return;
+      },
+    );
+  }
+
+  const akurva = req.body.additions.map(x => `(${recipeId}', '${x}')`);
+
+  if (req.body.additions.length != 0) {
+    pool.query(
+      `INSERT INTO additions VALUES ${akurva.join(', ')}`,
+      (err, end) => {
+        if (err) {
+          console.log('Hiba történt az adatbázis művelet közben! (2)');
+          res
+            .status(500)
+            .send('Hiba történt az adatbázis művelet közben! (2)');
+          return;
+        }
+        console.log(end);
+        return;
+      },
+    );
+  }
+
+  res.status(200).send('The recipe has been added!');
+  return;
 });
 
 app.get('/recipes', (req, res) => {
-  pool.query(`SELECT * FROM recipes`, (err, results) => {
+  pool.query(`SELECT *, LEFT(description, 100), (select count(*) from additions where recipes.id = additions.recipe_id) as additions FROM recipes`, (err, results) => {
     if (err) {
       res.status(500).send('Hiba történt az adatbázis lekérés közben!');
       return;
@@ -406,11 +425,35 @@ app.get('/recipes', (req, res) => {
   });
 });
 
+app.get('/recipes/:id', (req, res) => {
+  pool.query(`SELECT * FROM recipes where id = ${req.params['id']}`, (err, results) => {
+    if (err) {
+      res.status(500).send('Hiba történt az adatbázis lekérés közben!');
+      return;
+    }
+
+    res.status(200).send(results);
+    return;
+  });
+});
+
+app.get('/recipes/:id/additions', (req, res) => {
+  pool.query(`SELECT * FROM additions where additions.recipe_id = ${req.params['id']}`, (err, results) => {
+    if (err) {
+      res.status(500).send('Hiba történt az adatbázis lekérés közben!');
+      return;
+    }
+
+    res.status(200).send(results);
+    return;
+  });
+});
+
 // MIDDLEWARE functions
 
 // bejelentkezés ellenőrzése
 function logincheck(req, res, next) {
-  console.log('Login check meghívva');
+  console.log(req.header('Authorization'));
   let token = req.header('Authorization');
 
   if (!token) {
