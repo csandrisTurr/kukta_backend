@@ -103,6 +103,10 @@ app.post('/login', (req, res) => {
         res.status(203).send('Hibás belépési adatok!');
         return;
       }
+      if (results['banned']) {
+        res.status(203).send('ki vagy banolva!');
+        return;
+      }
       res.status(202).send(results);
       return;
     },
@@ -126,15 +130,9 @@ app.get('/categories', logincheck, (req, res) => {
 });
 
 // bejelentkezett felhasználó adatainak lekérése
-app.get('/me/:id', logincheck, (req, res) => {
-  //TODO: id-t megoldani backenden majd, hogy ne kelljen itt átadni
-  if (!req.params.id) {
-    res.status(203).send('Hiányzó azonosító!');
-    return;
-  }
-
+app.get('/me', logincheck, (req, res) => {
   pool.query(
-    `SELECT name, email, role, phone, banned FROM users WHERE ID='${req.params.id}'`,
+    `SELECT name, email, role, phone, banned FROM users WHERE ID='${req.header('Authorization')}'`,
     (err, results) => {
       if (err) {
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -152,6 +150,32 @@ app.get('/me/:id', logincheck, (req, res) => {
   );
 });
 
+app.patch('/me', logincheck, (req, res) => {
+  if (!req.body.name || !req.body.email || !req.body.phone) {
+    res.status(203).send('Hiányzó adatok!');
+    return;
+  }
+
+  pool.query(
+    `UPDATE users SET name='${req.body.name}', email='${
+      req.body.email
+    }', phone='${req.body.phone}' WHERE id='${req.header('Authorization')}'`,
+    (err, results) => {
+      if (err) {
+        res.status(500).send('Hiba történt az adatbázis lekérés közben!');
+        return;
+      }
+
+      if (results.affectedRows == 0) {
+        res.status(203).send('Hibás azonosító!');
+        return;
+      }
+
+      res.status(200).send('Felhasználó adatok módosítva!');
+      return;
+    },
+  );
+});
 // felhasználó módosítása
 app.patch('/users/:id', logincheck, (req, res) => {
   if (!req.params.id) {
@@ -159,18 +183,15 @@ app.patch('/users/:id', logincheck, (req, res) => {
     return;
   }
 
-  if (!req.body.name || !req.body.email || !req.body.role || !req.body.role) {
+  if (!req.body.name || !req.body.email || !req.body.role || !req.body.phone) {
     res.status(203).send('Hiányzó adatok!');
     return;
   }
 
-  //TODO: ne módosíthassa már meglévő email címre az email címét
-  console.log(req.body.role);
-
   pool.query(
     `UPDATE users SET name='${req.body.name}', email='${
       req.body.email
-    }', phone='${req.body.phone}', role='${req.body.role}' WHERE id='${req.params.id}'`,
+    }', phone='${req.body.phone}', role='${req.body.role}', banned='${req.body.banned}' WHERE id='${req.params.id}'`,
     (err, results) => {
       if (err) {
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -189,12 +210,7 @@ app.patch('/users/:id', logincheck, (req, res) => {
 });
 
 // jelszó módosítás
-app.patch('/passmod/:id', logincheck, (req, res) => {
-  if (!req.params.id) {
-    res.status(203).send('Hiányzó azonosító! (0)');
-    return;
-  }
-
+app.patch('/passmod', logincheck, (req, res) => {
   if (!req.body.oldpass || !req.body.newpass) {
     res.status(203).send('Hiányzó adatok!');
     return;
@@ -208,7 +224,7 @@ app.patch('/passmod/:id', logincheck, (req, res) => {
 
   // megnézzük, hogy jó-e a megadott jelenlegi jelszó
   pool.query(
-    `SELECT pass FROM users WHERE id='${req.params.id}'`,
+    `SELECT pass FROM users WHERE id='${req.header('Authorization')}'`,
     (err, results) => {
       if (err) {
         res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -225,7 +241,7 @@ app.patch('/passmod/:id', logincheck, (req, res) => {
       }
 
       pool.query(
-        `UPDATE users SET password='${CryptoJS.SHA1(req.body.newpass).toString()}' WHERE id='${req.params.id}'`,
+        `UPDATE users SET password='${CryptoJS.SHA1(req.body.newpass).toString()}' WHERE id='${req.header('Authorization')}'`,
         (err, results) => {
           if (err) {
             res.status(500).send('Hiba történt az adatbázis lekérés közben!');
@@ -417,8 +433,31 @@ app.post('/recipes', logincheck, (req, res) => {
   );
 });
 
+
+app.get('/recipes/:id/categories', (req, res) => {
+  pool.query(`SELECT category_id FROM categories, category_claims WHERE category_claims.category_id = categories.id and category_claims.recipe_id = ${req.params.id};`, (err, results) => {
+    if (err) {
+      res.status(500).send('hiba történt az adatbázis lekérés közben!');
+      return;
+    }
+    res.status(200).send(results);
+    return;
+  });
+});
+
 app.get('/recipes', (req, res) => {
-  pool.query(`SELECT *, LEFT(description, 100), (select count(*) from additions where recipes.id = additions.recipe_id) as additions FROM recipes`, (err, results) => {
+  pool.query(`select *, left(description, 100), (select count(*) from additions where recipes.id = additions.recipe_id) as additions from recipes`, (err, results) => {
+    if (err) {
+      res.status(500).send('hiba történt az adatbázis lekérés közben!');
+      return;
+    }
+    res.status(200).send(results);
+    return;
+  });
+});
+
+app.delete('/recipes/:id', (req, res) => {
+  pool.query(`DELETE FROM recipes WHERE id = ${req.params[`id`]}`, (err, results) => {
     if (err) {
       res.status(500).send('Hiba történt az adatbázis lekérés közben!');
       return;
