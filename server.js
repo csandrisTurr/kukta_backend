@@ -66,11 +66,7 @@ app.post('/reg', (req, res) => {
       pool.query(
         `INSERT INTO users VALUES('${uuid.v4()}', '${req.body.name}', '${
           req.body.email
-<<<<<<< HEAD
         }', SHA1('${req.body.password}'), 'usr', ${req.body.phone}, '0')`,
-=======
-        }', SHA1('${req.body.password}'), 'usr', NULL, '0')`,
->>>>>>> da5c8630f668ecb762cb0f9537a9f69f3343954c
           (err, results) => {
             if (err) {
             res.status(500).send('Hiba történt az adatbázis művelet közben!');
@@ -372,50 +368,53 @@ app.post('/recipes', logincheck, (req, res) => {
       }
 
       recipeId = end.insertId;
+
+      req.body.categories = req.body.categories;
+      const jaj = req.body.categories.map(x => `('${recipeId}', '${x}')`);
+
+      if (req.body.categories.length != 0) {
+        pool.query(
+          `INSERT INTO category_claims VALUES ${jaj.join(', ')}`,
+          (err, end) => {
+            if (err) {
+              console.log('Hiba történt az adatbázis művelet közben! (2)');
+              res
+                .status(500)
+                .send('Hiba történt az adatbázis művelet közben! (2)');
+              return;
+            }
+            console.log(end);
+            return;
+          },
+        );
+      }
+
+      const akurva = req.body.additions.map(x => `('${recipeId}', '${x}')`);
+      console.log(
+          `INSERT INTO additions VALUES ${akurva.join(', ')}`
+      )
+
+      if (req.body.additions.length != 0) {
+        pool.query(
+          `INSERT INTO additions VALUES ${akurva.join(', ')}`,
+          (err, end) => {
+            if (err) {
+              console.log('Hiba történt az adatbázis művelet közben! (3)');
+              res
+                .status(500)
+                .send('Hiba történt az adatbázis művelet közben! (3)');
+              return;
+            }
+            console.log(end);
+            return;
+          },
+        );
+      }
+
+      res.status(200).send('The recipe has been added!');
+      return;
     },
   );
-
-  req.body.categories = req.body.categories;
-  const jaj = req.body.categories.map(x => `(${recipeId}', '${x}')`);
-
-  if (req.body.categories.length != 0) {
-    pool.query(
-      `INSERT INTO category_claims VALUES ${jaj.join(', ')}`,
-      (err, end) => {
-        if (err) {
-          console.log('Hiba történt az adatbázis művelet közben! (2)');
-          res
-            .status(500)
-            .send('Hiba történt az adatbázis művelet közben! (2)');
-          return;
-        }
-        console.log(end);
-        return;
-      },
-    );
-  }
-
-  const akurva = req.body.additions.map(x => `(${recipeId}', '${x}')`);
-
-  if (req.body.additions.length != 0) {
-    pool.query(
-      `INSERT INTO additions VALUES ${akurva.join(', ')}`,
-      (err, end) => {
-        if (err) {
-          console.log('Hiba történt az adatbázis művelet közben! (2)');
-          res
-            .status(500)
-            .send('Hiba történt az adatbázis művelet közben! (2)');
-          return;
-        }
-        console.log(end);
-        return;
-      },
-    );
-  }
-
-  res.status(200).send('The recipe has been added!');
-  return;
 });
 
 app.get('/recipes', (req, res) => {
@@ -457,7 +456,6 @@ app.get('/recipes/:id/additions', (req, res) => {
 
 // bejelentkezés ellenőrzése
 function logincheck(req, res, next) {
-  console.log(req.header('Authorization'));
   let token = req.header('Authorization');
 
   if (!token) {
@@ -476,6 +474,19 @@ function logincheck(req, res, next) {
 
   return;
 }
+
+app.get('/stats', logincheck, (req, res) => {
+  let stats = {};
+
+  pool.query(`SELECT (SELECT count(*) FROM users) as users, (SELECT count(*) FROM categories) as categories, (SELECT count(*) FROM category_claims) as categoryClaims, (SELECT count(*) FROM recipes) as recipes, (SELECT count(*) FROM additions) as additions;`, (err, results) => {
+    if (err)
+      return res.status(500).send('Hiba történt az adatbázis lekérés közben!');
+
+    stats = results[0];
+    res.status(200).send(stats);
+  });
+
+});
 
 // jogosultság ellenőrzése
 function admincheck(req, res, next) {
